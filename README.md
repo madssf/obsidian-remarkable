@@ -1,6 +1,6 @@
 # obsidian-remarkable
 
-This is a plugin for converting .md files to .pdf and upload them to my.remarkable.com
+This is an Obsidian plugin for converting .md files to .pdf and upload them to my.remarkable.com
 
 ## Requirements
 - [rmapi](https://github.com/juruen/rmapi)
