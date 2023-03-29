@@ -1,18 +1,18 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { spawnSync} from "child_process";
+import {App, Notice, Plugin, PluginSettingTab, Setting} from 'obsidian';
+import {spawnSync, SpawnSyncReturns} from "child_process";
 
 interface RemarkablePluginSettings {
-	fileToSync: string;
 	nodePath: string;
 	md2pdfPath: string;
 	rmapiPath: string;
+	cleanup: boolean,
 }
 
 const DEFAULT_SETTINGS: RemarkablePluginSettings = {
-	fileToSync: 'default',
-	nodePath: '$HOME/node/bin/node',
-	md2pdfPath: '$HOME/node/bin/node/md-to-pdf',
+	nodePath: '/usr/local/bin/node',
+	md2pdfPath: '/usr/local/bin/node/md-to-pdf',
 	rmapiPath: '$HOME/go/bin/rmapi',
+	cleanup: true,
 
 }
 
@@ -24,20 +24,34 @@ export default class RemarkablePlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('cloud-cog', 'reMarkable Plugin', () => {
-			this.convertToPdf().then(() => {
-				new Notice('Converted to PDF successfully')
-				this.uploadToRemarkable()
-					.then(() => {
-						new Notice('Upload to reMarkable successful!');
-					})
-					.catch((e) => {
-						new Notice("Failed to upload to reMarkable." + e)
-					})
-			}).catch((e) => {
-				new Notice('Failed to convert to PDF.' + e)
-			})
+		this.addRibbonIcon('cloud-lightning', 'Upload current file to reMarkable', () => {
+			const currentFilePath = this.app.workspace.activeEditor?.file?.path
+			if (!currentFilePath) {
+				new Notice("No active editor file.")
+				return
+			}
+			if (!currentFilePath.endsWith(".md")) {
+				new Notice("Can only upload .md files")
+			}
+			this.convertToPdf(currentFilePath)
+				.then(() => {
+					new Notice('Converted to PDF successfully')
+					this.uploadToRemarkable(currentFilePath)
+						.then(() => {
+							new Notice('Upload to reMarkable successful!');
+						})
+						.catch((e) => {
+							new Notice("Failed to upload to reMarkable." + e)
+						})
+						.finally(() => {
+							if (this.settings.cleanup) {
+								this.cleanUp(currentFilePath)
+							}
+						})
+				})
+				.catch((e) => {
+					new Notice('Failed to convert to PDF.' + e)
+				})
 		});
 
 		this.addSettingTab(new SampleSettingTab(this.app, this));
@@ -55,36 +69,49 @@ export default class RemarkablePlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	async convertToPdf() {
+	async convertToPdf(fileName: string) {
 
 		const command = this.settings.nodePath;
-		const args = [this.settings.md2pdfPath, `${this.vaultDirectory}/${this.settings.fileToSync}.md`];
+		const args = [this.settings.md2pdfPath, `${this.vaultDirectory}/${fileName}`];
 
-		const result = spawnSync(command, args);
-
-		console.log(this.settings.md2pdfPath)
-
-		if (result.error) {
-			throw Error(`${result.error.message}`);
-		}
-		if (result.stderr.length > 0) {
-			throw Error(`stderr: ${result.stderr}`);
-		}
-		console.log(`stdout: ${result.stdout}`);
-
+		const result = spawnSync(command, args, {shell: true});
+		maybeHandleError(result)
 	}
-	async uploadToRemarkable() {
-		const result = spawnSync(
-			`${this.settings.rmapiPath} put ${this.vaultDirectory}/${this.settings.fileToSync}.pdf`,
-			{shell: true}
-		)
-		if (result.error) {
-			throw Error(`${result.error.message}`);
-		}
-		if (result.stderr.length > 0) {
-			throw Error(`stderr: ${result.stderr}`);
-		}
-		console.log(`stdout: ${result.stdout}`);
+
+	async uploadToRemarkable(fileName: string) {
+
+		const actualFileName = fileName.replace(/\.md$/, '');
+
+		const command = this.settings.rmapiPath;
+		const args = ["put", `${this.vaultDirectory}/${actualFileName}.pdf`];
+
+		const result = spawnSync(command, args, {shell: true});
+
+		maybeHandleError(result)
+	}
+
+	async cleanUp(fileName: string) {
+		const actualFileName = fileName.replace(/\.md$/, '');
+
+		const command = "rm";
+		const args = [`${this.vaultDirectory}/${actualFileName}.pdf`];
+
+		const result = spawnSync(command, args, {shell: true});
+
+		maybeHandleError(result)
+	}
+}
+
+function maybeHandleError(result: SpawnSyncReturns<Buffer>) {
+	if (result.error) {
+		const error = result.error.message
+		console.error("Error: " + error)
+		throw Error(error);
+	}
+	if (result.stderr.length > 0) {
+		const error = result.stderr.toString()
+		console.error("stderr: " + error)
+		throw Error(error);
 	}
 }
 
@@ -104,15 +131,15 @@ class SampleSettingTab extends PluginSettingTab {
 		containerEl.createEl('h2', {text: 'Settings'});
 
 		new Setting(containerEl)
-			.setName('File to sync')
-			.setDesc('The file that is synced to reMarkable')
-			.addText(text => text
-				.setPlaceholder('Enter the path to the file from the vault root')
-				.setValue(this.plugin.settings.fileToSync)
-				.onChange(async (value) => {
-					this.plugin.settings.fileToSync = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName('Clean up')
+			.setDesc('Delete the generated PDF after uploading.')
+			.addToggle(value => value
+				.setValue(this.plugin.settings.cleanup)
+				.onChange(async (v) => {
+					this.plugin.settings.cleanup = v;
+					await this.plugin.saveSettings()
+				})
+			)
 
 		new Setting(containerEl)
 			.setName('Node path')
