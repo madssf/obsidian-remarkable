@@ -6,7 +6,8 @@ interface RemarkablePluginSettings {
 	md2pdfPath: string;
 	rmapiPath: string;
 	reMarkableFolder: string | null;
-	cleanup: boolean,
+	cleanup: boolean;
+	showSidebarIcon: boolean;
 }
 
 const DEFAULT_SETTINGS: RemarkablePluginSettings = {
@@ -15,27 +16,46 @@ const DEFAULT_SETTINGS: RemarkablePluginSettings = {
 	rmapiPath: '$HOME/go/bin/rmapi',
 	reMarkableFolder: null,
 	cleanup: true,
+	showSidebarIcon: false,
 
 }
+
+const UPLOAD_ACTIVE_ICON = 'cloud-lightning'
 
 export default class RemarkablePlugin extends Plugin {
 	settings: RemarkablePluginSettings;
 	//@ts-ignore
 	vaultDirectory = this.app.vault.adapter.basePath
+	sideBarButton: HTMLElement;
 
 	async onload() {
 		await this.loadSettings();
 
-		this.addRibbonIcon('cloud-lightning', 'Upload current file to reMarkable', async() => {
-			await this.mainHandler()
-		});
+		this.addCommand({
+			id: 'upload-active-to-remarkable',
+			name: 'Upload active file to reMarkable',
+			icon: UPLOAD_ACTIVE_ICON,
+			checkCallback: (checking) => {
+				if (checking) {
+					return this.app.workspace.getActiveFile() !== null
+				} else {
+					return this.uploadActiveFile()
+				}
+
+		}
+		})
+
+		this.sideBarButton = this.addRibbonIcon(UPLOAD_ACTIVE_ICON, 'Upload current file to reMarkable', async() => {
+			await this.uploadActiveFile()
+		})
+
 
 
 		this.addSettingTab(new RemarkablePluginSettingTab(this.app, this));
 
 	}
 
-	async mainHandler() {
+	uploadActiveFile() {
 		const rawPath = this.app.workspace.activeEditor?.file?.path
 		const currentFilePath = rawPath?.replace(/ /g, "\\ ")
 		if (!currentFilePath) {
@@ -59,7 +79,7 @@ export default class RemarkablePlugin extends Plugin {
 					})
 					.finally(() => {
 						if (this.settings.cleanup) {
-							this.cleanUp(currentFilePath)
+							this.cleanUp(currentFilePath).catch((e) => new Notice("Failed to clean up after upload. " + e))
 						}
 					})
 			})
@@ -166,6 +186,18 @@ class RemarkablePluginSettingTab extends PluginSettingTab {
 				.onChange(async (v) => {
 					this.plugin.settings.cleanup = v;
 					await this.plugin.saveSettings()
+				})
+			)
+
+		new Setting(containerEl)
+			.setName('Show sidebar icon')
+			.setDesc('Whether to show a sidebar icon.')
+			.addToggle(value => value
+				.setValue(this.plugin.settings.showSidebarIcon)
+				.onChange(async (v) => {
+					this.plugin.settings.showSidebarIcon = v;
+					await this.plugin.saveSettings()
+					v ? this.plugin.sideBarButton.show() : this.plugin.sideBarButton.hide();
 				})
 			)
 
