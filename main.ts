@@ -35,14 +35,9 @@ export default class RemarkablePlugin extends Plugin {
 			id: 'upload-active-to-remarkable',
 			name: 'Upload active file to reMarkable',
 			icon: UPLOAD_ACTIVE_ICON,
-			checkCallback: (checking) => {
-				if (checking) {
-					return this.app.workspace.getActiveFile() !== null
-				} else {
-					return this.uploadActiveFile()
-				}
-
-		}
+			callback: () => {
+				this.uploadActiveFile()
+			}
 		})
 
 		this.sideBarButton = this.addRibbonIcon(UPLOAD_ACTIVE_ICON, 'Upload current file to reMarkable', async() => {
@@ -50,18 +45,17 @@ export default class RemarkablePlugin extends Plugin {
 		})
 
 
-
 		this.addSettingTab(new RemarkablePluginSettingTab(this.app, this));
 
 	}
 
 	uploadActiveFile() {
-		const rawPath = this.app.workspace.activeEditor?.file?.path
-		const currentFilePath = rawPath?.replace(/ /g, "\\ ")
-		if (!currentFilePath) {
+		const activeFile = this.app.workspace.getActiveFile()
+		if (!activeFile) {
 			new Notice("No active editor file.")
 			return
 		}
+		const currentFilePath = activeFile.path.replace(/ /g, "\\ ")
 		if (!currentFilePath.endsWith(".md")) {
 			new Notice("Can only upload .md files")
 			return
