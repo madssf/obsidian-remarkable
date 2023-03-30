@@ -60,10 +60,8 @@ export default class RemarkablePlugin extends Plugin {
 			new Notice("Can only upload .md files")
 			return
 		}
-		new Notice("Starting upload to reMarkable")
 		this.convertToPdf(currentFilePath)
 			.then(() => {
-				new Notice('Converted to PDF successfully.')
 				this.uploadToRemarkable(currentFilePath)
 					.then(() => {
 						new Notice('Upload to reMarkable successful!');
