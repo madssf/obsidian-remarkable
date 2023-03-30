@@ -26,39 +26,46 @@ export default class RemarkablePlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		this.addRibbonIcon('cloud-lightning', 'Upload current file to reMarkable', () => {
-			const rawPath = this.app.workspace.activeEditor?.file?.path
-			const currentFilePath = rawPath?.replace(/ /g, "\\ ")
-			if (!currentFilePath) {
-				new Notice("No active editor file.")
-				return
-			}
-			if (!currentFilePath.endsWith(".md")) {
-				new Notice("Can only upload .md files")
-			}
-			this.convertToPdf(currentFilePath)
-				.then(() => {
-					new Notice('Converted to PDF successfully')
-					this.uploadToRemarkable(currentFilePath)
-						.then(() => {
-							new Notice('Upload to reMarkable successful!');
-						})
-						.catch((e) => {
-							new Notice("Failed to upload to reMarkable." + e)
-						})
-						.finally(() => {
-							if (this.settings.cleanup) {
-								this.cleanUp(currentFilePath)
-							}
-						})
-				})
-				.catch((e) => {
-					new Notice('Failed to convert to PDF.' + e)
-				})
+		this.addRibbonIcon('cloud-lightning', 'Upload current file to reMarkable', async() => {
+			await this.mainHandler()
 		});
 
-		this.addSettingTab(new SampleSettingTab(this.app, this));
 
+		this.addSettingTab(new RemarkablePluginSettingTab(this.app, this));
+
+	}
+
+	async mainHandler() {
+		const rawPath = this.app.workspace.activeEditor?.file?.path
+		const currentFilePath = rawPath?.replace(/ /g, "\\ ")
+		if (!currentFilePath) {
+			new Notice("No active editor file.")
+			return
+		}
+		if (!currentFilePath.endsWith(".md")) {
+			new Notice("Can only upload .md files")
+			return
+		}
+		new Notice("Starting upload to reMarkable")
+		this.convertToPdf(currentFilePath)
+			.then(() => {
+				new Notice('Converted to PDF successfully.')
+				this.uploadToRemarkable(currentFilePath)
+					.then(() => {
+						new Notice('Upload to reMarkable successful!');
+					})
+					.catch((e) => {
+						new Notice("Failed to upload to reMarkable." + e)
+					})
+					.finally(() => {
+						if (this.settings.cleanup) {
+							this.cleanUp(currentFilePath)
+						}
+					})
+			})
+			.catch((e) => {
+				new Notice('Failed to convert to PDF.' + e)
+			})
 	}
 
 	onunload() {
@@ -121,7 +128,7 @@ function maybeHandleError(result: SpawnSyncReturns<Buffer>) {
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
+class RemarkablePluginSettingTab extends PluginSettingTab {
 	plugin: RemarkablePlugin;
 
 	constructor(app: App, plugin: RemarkablePlugin) {
@@ -138,7 +145,7 @@ class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('reMarkable folder')
-			.setDesc('A folder on the reMarkable to upload to. Note that this folder must exist. Can contain "/".')
+			.setDesc('A folder on the reMarkable to upload to. Note that this folder must exist. Can contain "/". Leave empty to use root.')
 			.addText(text => text
 				.setPlaceholder('A folder on reMarkable')
 				.setValue(this.plugin.settings.reMarkableFolder ?? "")
