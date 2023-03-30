@@ -8,6 +8,7 @@ interface RemarkablePluginSettings {
 	reMarkableFolder: string | null;
 	cleanup: boolean;
 	showSidebarIcon: boolean;
+	showPopups: boolean;
 }
 
 const DEFAULT_SETTINGS: RemarkablePluginSettings = {
@@ -17,7 +18,7 @@ const DEFAULT_SETTINGS: RemarkablePluginSettings = {
 	reMarkableFolder: null,
 	cleanup: true,
 	showSidebarIcon: false,
-
+	showPopups: true,
 }
 
 const UPLOAD_ACTIVE_ICON = 'cloud-lightning'
@@ -49,34 +50,35 @@ export default class RemarkablePlugin extends Plugin {
 
 	}
 
-	uploadActiveFile() {
+	async uploadActiveFile() {
+		this.displayMessage("Starting upload to reMarkable")
 		const activeFile = this.app.workspace.getActiveFile()
 		if (!activeFile) {
-			new Notice("No active editor file.")
+			this.displayError("No active editor file.")
 			return
 		}
 		const currentFilePath = activeFile.path.replace(/ /g, "\\ ")
 		if (!currentFilePath.endsWith(".md")) {
-			new Notice("Can only upload .md files")
+			this.displayError("Can only upload .md files")
 			return
 		}
 		this.convertToPdf(currentFilePath)
 			.then(() => {
 				this.uploadToRemarkable(currentFilePath)
 					.then(() => {
-						new Notice('Upload to reMarkable successful!');
+						this.displayMessage('Upload to reMarkable successful!');
 					})
 					.catch((e) => {
-						new Notice("Failed to upload to reMarkable." + e)
+						this.displayError("Failed to upload to reMarkable." + e)
 					})
 					.finally(() => {
 						if (this.settings.cleanup) {
-							this.cleanUp(currentFilePath).catch((e) => new Notice("Failed to clean up after upload. " + e))
+							this.cleanUp(currentFilePath).catch((e) => this.displayError("Failed to clean up after upload. " + e))
 						}
 					})
 			})
 			.catch((e) => {
-				new Notice('Failed to convert to PDF.' + e)
+				this.displayError('Failed to convert to PDF.' + e)
 			})
 	}
 
@@ -124,6 +126,23 @@ export default class RemarkablePlugin extends Plugin {
 		const result = spawnSync(command, args, {shell: true});
 
 		maybeHandleError(result)
+	}
+
+	displayMessage(message: string, timeout: number = 4 * 1000): void {
+
+
+		if (this.settings.showPopups) {
+			new Notice(message, 5 * 1000);
+		}
+
+		console.log(`obsidian-remarkable: ${message}`);
+	}
+	displayError(message: any, timeout: number = 10 * 1000): void {
+
+		// Some errors might not be of type string
+		message = message.toString();
+		new Notice(message, timeout);
+		console.log(`obsidian-remarkable error: ${message}`);
 	}
 }
 
@@ -190,6 +209,17 @@ class RemarkablePluginSettingTab extends PluginSettingTab {
 					this.plugin.settings.showSidebarIcon = v;
 					await this.plugin.saveSettings()
 					v ? this.plugin.sideBarButton.show() : this.plugin.sideBarButton.hide();
+				})
+			)
+
+		new Setting(containerEl)
+			.setName('Show popups')
+			.setDesc('Show popup messages.')
+			.addToggle(value => value
+				.setValue(this.plugin.settings.showPopups)
+				.onChange(async (v) => {
+					this.plugin.settings.showPopups = v;
+					await this.plugin.saveSettings()
 				})
 			)
 
