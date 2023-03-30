@@ -5,6 +5,7 @@ interface RemarkablePluginSettings {
 	nodePath: string;
 	md2pdfPath: string;
 	rmapiPath: string;
+	reMarkableFolder: string | null;
 	cleanup: boolean,
 }
 
@@ -12,6 +13,7 @@ const DEFAULT_SETTINGS: RemarkablePluginSettings = {
 	nodePath: '/usr/local/bin/node',
 	md2pdfPath: '/usr/local/bin/node/md-to-pdf',
 	rmapiPath: '$HOME/go/bin/rmapi',
+	reMarkableFolder: null,
 	cleanup: true,
 
 }
@@ -25,7 +27,8 @@ export default class RemarkablePlugin extends Plugin {
 		await this.loadSettings();
 
 		this.addRibbonIcon('cloud-lightning', 'Upload current file to reMarkable', () => {
-			const currentFilePath = this.app.workspace.activeEditor?.file?.path
+			const rawPath = this.app.workspace.activeEditor?.file?.path
+			const currentFilePath = rawPath?.replace(/ /g, "\\ ")
 			if (!currentFilePath) {
 				new Notice("No active editor file.")
 				return
@@ -84,6 +87,9 @@ export default class RemarkablePlugin extends Plugin {
 
 		const command = this.settings.rmapiPath;
 		const args = ["put", `${this.vaultDirectory}/${actualFileName}.pdf`];
+		if (this.settings.reMarkableFolder) {
+			args.push(this.settings.reMarkableFolder)
+		}
 
 		const result = spawnSync(command, args, {shell: true});
 
@@ -131,6 +137,21 @@ class SampleSettingTab extends PluginSettingTab {
 		containerEl.createEl('h2', {text: 'Settings'});
 
 		new Setting(containerEl)
+			.setName('reMarkable folder')
+			.setDesc('A folder on the reMarkable to upload to. Note that this folder must exist. Can contain "/".')
+			.addText(text => text
+				.setPlaceholder('A folder on reMarkable')
+				.setValue(this.plugin.settings.reMarkableFolder ?? "")
+				.onChange(async (value) => {
+					if (value === "") {
+						this.plugin.settings.reMarkableFolder = null
+					} else {
+						this.plugin.settings.reMarkableFolder = value;
+					}
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
 			.setName('Clean up')
 			.setDesc('Delete the generated PDF after uploading.')
 			.addToggle(value => value
@@ -142,10 +163,10 @@ class SampleSettingTab extends PluginSettingTab {
 			)
 
 		new Setting(containerEl)
-			.setName('Node path')
+			.setName('Node executable path')
 			.setDesc('Absolute path to Node on your system, e.g. the output of `which node`')
 			.addText(text => text
-				.setPlaceholder('Enter the absolute path to Node')
+				.setPlaceholder('Absolute path to Node')
 				.setValue(this.plugin.settings.nodePath)
 				.onChange(async (value) => {
 					this.plugin.settings.nodePath = value;
@@ -153,10 +174,10 @@ class SampleSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('md-to-pdf')
+			.setName('md-to-pdf executable path')
 			.setDesc('Absolute path to md-to-pdf on your system, e.g. the output of `which md-to-pdf`')
 			.addText(text => text
-				.setPlaceholder('Enter the absolute path to md-to-pdf')
+				.setPlaceholder('Absolute path to md-to-pdf')
 				.setValue(this.plugin.settings.md2pdfPath)
 				.onChange(async (value) => {
 					this.plugin.settings.md2pdfPath = value;
@@ -164,10 +185,10 @@ class SampleSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('rmapi')
+			.setName('rmapi executable path')
 			.setDesc('Absolute path to rmapi on your system, e.g. the output of `which rmapi`')
 			.addText(text => text
-				.setPlaceholder('Enter the absolute path to rmapi')
+				.setPlaceholder('Absolute path to rmapi')
 				.setValue(this.plugin.settings.rmapiPath)
 				.onChange(async (value) => {
 					this.plugin.settings.rmapiPath = value;
